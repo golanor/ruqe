@@ -39,64 +39,44 @@ mod operators {
     );
 
     #[derive(Debug, Clone)]
-    pub struct Operator<T: ValidOperatorType, const N: usize>
-    where
-        SMatrix<Complex<T>, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>: Sized,
+    pub struct Operator<T: ValidOperatorType, const N: usize, const M: usize>
     {
         pub qubits: [usize; N],
-        pub matrix: SMatrix<T, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>,
+        pub matrix: SMatrix<T, M, M>,
     }
 
-    impl<T: ValidOperatorType, const N: usize> NQubitOperator for Operator<T, N>
-    where
-        SMatrix<T, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>: Sized,
-    {
+    impl<T: ValidOperatorType, const N: usize, const M: usize> NQubitOperator for Operator<T, N, M> {
         type OperatorType = T;
     }
 
-    impl<T: ValidOperatorType, const N: usize> Operator<T, N>
-    where
-        SMatrix<T, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>: Sized,
+    impl<T: ValidOperatorType, const N: usize, const M: usize> Operator<T, N, M>
     {
         pub fn new(
             qubits: [usize; N],
-            matrix: SMatrix<T, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>,
-        ) -> Operator<T, N>
-        where
-            SMatrix<T, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>: Sized,
-        {
+            matrix: SMatrix<T, M, M>,
+        ) -> Operator<T, N, M>
+       {
             Operator { qubits, matrix }
         }
     }
 
-    impl <const N: usize>  Operator<Complex<f32>, N>
-    where
-        SMatrix<Complex<f32>, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>: Sized,
-    {
-        pub fn from_pauli_string(
-            qubits: [usize; N],
-            pauli_string: &str,
-        ) -> Operator<Complex<f32>, N>
-        where
-            SMatrix<Complex<f32>, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>: Sized
-        {
-            let mut matrix = zero::<SMatrix<Complex<f32>, { 2_usize.pow(N as u32) }, { 2_usize.pow(N as u32) }>>();
-            let blocks = pauli_string.to_uppercase().chars().map(|x| match x {
-                'X' => &X,
-                'Y' => &Y,
-                'Z' => &Z,
-                'I' => &I,
-                _ => panic!("Invalid Pauli string"),
-            }).collect::<Vec<_>>();
-            let mut i = 0_usize;
-            for block in blocks {
-                let block_size = block.nrows();
-                matrix.slice_mut((i, i), (block_size, block_size)).copy_from(block);
-                i += block_size;
-            }
-            Operator { qubits, matrix }
-        }
-    }
+    // impl <const N: usize, const M: usize>  Operator<Complex<f32>, N, M>
+    // {
+    //     pub fn from_pauli_string(
+    //         qubits: [usize; N],
+    //         pauli_string: &str,
+    //     ) -> Operator<Complex<f32>, N, M>
+    //     {
+    //         if pauli_string.len() != N {
+    //             panic!("Invalid Pauli string length");
+    //         }
+    //         if N != M {
+    //             panic!("Invalid Pauli string size");
+    //         }
+    //         let matrix = operator_from_pauli_string![pauli_string.chars()];
+    //         Operator { qubits, matrix }
+    //     }
+    // }
 
     pub struct StaticHamiltonian<O: NQubitOperator, const N: usize> {
         pub terms: [Vec<O>; N],
@@ -147,13 +127,5 @@ mod tests {
     #[test]
     fn test_two_qubit_operator() {
         let _xy = Operator::new([0, 1], X.kronecker(&Y));
-    }
-
-    #[test]
-    fn test_from_pauli_string() {
-        let _x = Operator::from_pauli_string([0], "X");
-        let _xy = Operator::from_pauli_string([0, 1], "XY");
-        assert_eq!(_xy.matrix, X.kronecker(&Y));
-        assert_eq!(_x.matrix, X);
     }
 }
