@@ -1,3 +1,5 @@
+#![feature(int_log)]
+
 mod operators;
 
 fn main() {

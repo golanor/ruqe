@@ -1,15 +1,16 @@
 mod operators {
-    use nalgebra::{Complex, Matrix2, OMatrix, SMatrix, SVector, zero};
-    use std::ops::AddAssign;
+    use std::fmt::Debug;
+    use nalgebra::{Complex, Matrix2, SMatrix, zero};
+    use num_traits::{One, Zero};
 
-    pub trait ValidOperatorType {}
+    pub trait ValidOperatorType: Clone + PartialEq + Debug + Zero + One{}
 
     impl ValidOperatorType for Complex<f64> {}
     impl ValidOperatorType for Complex<f32> {}
     impl ValidOperatorType for f64 {}
     impl ValidOperatorType for f32 {}
 
-    pub trait NQubitOperator {
+    pub trait NQubitOperator{
         type OperatorType: ValidOperatorType;
     }
 
@@ -39,68 +40,63 @@ mod operators {
     );
 
     #[derive(Debug, Clone)]
-    pub struct Operator<T: ValidOperatorType, const N: usize, const M: usize>
+    pub struct Operator<'a, T: ValidOperatorType, const M: usize>
     {
-        pub qubits: [usize; N],
+        pub qubits: &'a[usize],
         pub matrix: SMatrix<T, M, M>,
     }
 
-    impl<T: ValidOperatorType, const N: usize, const M: usize> NQubitOperator for Operator<T, N, M> {
+    impl<T: ValidOperatorType, const M: usize> NQubitOperator for Operator<'_, T, M> {
         type OperatorType = T;
     }
 
-    impl<T: ValidOperatorType, const N: usize, const M: usize> Operator<T, N, M>
+    impl<T: ValidOperatorType, const M: usize> Operator<'_, T, M>
     {
         pub fn new(
-            qubits: [usize; N],
+            qubits: &[usize],
             matrix: SMatrix<T, M, M>,
-        ) -> Operator<T, N, M>
+        ) -> Operator<T, M>
        {
             Operator { qubits, matrix }
         }
-    }
 
-    // impl <const N: usize, const M: usize>  Operator<Complex<f32>, N, M>
-    // {
-    //     pub fn from_pauli_string(
-    //         qubits: [usize; N],
-    //         pauli_string: &str,
-    //     ) -> Operator<Complex<f32>, N, M>
-    //     {
-    //         if pauli_string.len() != N {
-    //             panic!("Invalid Pauli string length");
-    //         }
-    //         if N != M {
-    //             panic!("Invalid Pauli string size");
-    //         }
-    //         let matrix = operator_from_pauli_string![pauli_string.chars()];
-    //         Operator { qubits, matrix }
-    //     }
-    // }
-
-    pub struct StaticHamiltonian<O: NQubitOperator, const N: usize> {
-        pub terms: [Vec<O>; N],
-    }
-
-    impl<O: NQubitOperator, const N: usize> StaticHamiltonian<O, N> {
-        pub fn new(terms: [Vec<O>; N]) -> StaticHamiltonian<O, N> {
-            StaticHamiltonian { terms }
+        pub fn embed_in_hilbert_space<const N: usize>(
+            &self,
+        ) -> SMatrix<T, N, N>
+        {
+            let mut result = Vec::with_capacity(N * N);
+            let row_shift = N;
+            for q in 0..N {
+                let index = (2 as usize).pow(q as u32);
+                let mat = if self.qubits.contains(&q) {
+                    let qubit_index = self.qubits.iter().position(|&x| x == q).unwrap();
+                    self.matrix.fixed_slice::<2, 2>(2*qubit_index, 2*qubit_index).clone_owned()
+                } else {
+                    SMatrix::<T, 2, 2>::identity()
+                };
+                result.splice(index..=(index + 1), mat.row(0));
+                result.splice((index + (q + 1) * row_shift)..=(index + (q+1)*row_shift + 1), mat.row(1));
+            }
+            SMatrix::from_row_slice(result.as_slice())
         }
+    }
 
-        // pub fn evolve(
-        //     &self,
-        //     state: &mut SVector<O::OperatorType, { 2_usize.pow(N as u32) }>,
-        // ) -> SVector<O::OperatorType, { 2_usize.pow(N as u32) }> {
-        //     let mut result = zero::<SVector<O::OperatorType, { 2_usize.pow(N as u32) }>>();
-        //     for term in self.terms.iter() {
-        //         for operator in term.iter() {
-        //             let mut new_state = state.clone();
-        //             new_state.apply_matrix(&operator.matrix);
-        //             result.add_assign(&new_state);
-        //         }
-        //     }
-        //     result
-        // }
+    pub struct StaticHamiltonian<O: NQubitOperator, const M: usize> {
+        pub matrix: SMatrix<O::OperatorType, M, M>,
+        pub qubits: usize,
+    }
+
+    impl<O: NQubitOperator, const M: usize> StaticHamiltonian<O, M> {
+        pub fn new(matrix: SMatrix<O::OperatorType, M, M>) -> StaticHamiltonian<O, M> {
+            StaticHamiltonian { matrix, qubits: (M as u32).log2() as usize }
+        }
+        pub fn from_operator_sum(operators: &[O]) -> StaticHamiltonian<O, M> {
+            let mut matrix = zero::<SMatrix<O::OperatorType, M, M>>();
+            for operator in operators {
+                matrix += &operator.matrix;
+            }
+            StaticHamiltonian::new(matrix)
+        }
     }
 }
 
@@ -121,11 +117,11 @@ mod tests {
 
     #[test]
     fn test_single_qubit_operator() {
-        let _x = Operator::new([0], X);
+        let _x = Operator::new(&[0], X);
     }
 
     #[test]
     fn test_two_qubit_operator() {
-        let _xy = Operator::new([0, 1], X.kronecker(&Y));
+        let _xy = Operator::new(&[0, 1], X.kronecker(&Y));
     }
 }
