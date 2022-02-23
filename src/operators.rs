@@ -1,16 +1,20 @@
 mod operators {
     use std::fmt::Debug;
-    use nalgebra::{Complex, Matrix2, SMatrix, zero};
+    use std::ops::{Add, AddAssign};
+    use nalgebra::{Complex, Matrix2, Scalar, SMatrix, zero};
     use num_traits::{One, Zero};
 
-    pub trait ValidOperatorType: Clone + PartialEq + Debug + Zero + One{}
+    pub trait ValidOperatorType: Clone + PartialEq + Debug + Zero + One + Scalar + Add + AddAssign{}
 
     impl ValidOperatorType for Complex<f64> {}
+
     impl ValidOperatorType for Complex<f32> {}
+
     impl ValidOperatorType for f64 {}
+
     impl ValidOperatorType for f32 {}
 
-    pub trait NQubitOperator{
+    pub trait NQubitOperator {
         type OperatorType: ValidOperatorType;
     }
 
@@ -42,7 +46,7 @@ mod operators {
     #[derive(Debug, Clone)]
     pub struct Operator<'a, T: ValidOperatorType, const M: usize>
     {
-        pub qubits: &'a[usize],
+        pub qubits: &'a [usize],
         pub matrix: SMatrix<T, M, M>,
     }
 
@@ -50,13 +54,13 @@ mod operators {
         type OperatorType = T;
     }
 
-    impl<T: ValidOperatorType, const M: usize> Operator<'_, T, M>
+    impl<T: 'static + ValidOperatorType, const M: usize> Operator<'_, T, M>
     {
         pub fn new(
             qubits: &[usize],
             matrix: SMatrix<T, M, M>,
         ) -> Operator<T, M>
-       {
+        {
             Operator { qubits, matrix }
         }
 
@@ -70,12 +74,12 @@ mod operators {
                 let index = (2 as usize).pow(q as u32);
                 let mat = if self.qubits.contains(&q) {
                     let qubit_index = self.qubits.iter().position(|&x| x == q).unwrap();
-                    self.matrix.fixed_slice::<2, 2>(2*qubit_index, 2*qubit_index).clone_owned()
+                    self.matrix.fixed_slice::<2, 2>(2 * qubit_index, 2 * qubit_index).clone_owned()
                 } else {
                     SMatrix::<T, 2, 2>::identity()
                 };
-                result.splice(index..=(index + 1), mat.row(0));
-                result.splice((index + (q + 1) * row_shift)..=(index + (q+1)*row_shift + 1), mat.row(1));
+                result.splice(index..=(index + 1), mat.row(0).iter().cloned());
+                result.splice((index + (q + 1) * row_shift)..=(index + (q + 1) * row_shift + 1), mat.row(1).iter().cloned());
             }
             SMatrix::from_row_slice(result.as_slice())
         }
@@ -86,16 +90,31 @@ mod operators {
         pub qubits: usize,
     }
 
+    impl<O: NQubitOperator, const M: usize> Add for StaticHamiltonian<O, M> {
+        type Output = StaticHamiltonian<O, M>;
+
+        fn add(self, other: StaticHamiltonian<O, M>) -> StaticHamiltonian<O, M> {
+            StaticHamiltonian {
+                matrix: self.matrix + other.matrix,
+                qubits: self.qubits,
+            }
+        }
+    }
+
+    impl<O: NQubitOperator, const M: usize, const N: usize> Add<Operator<'_, O::OperatorType, N>> for StaticHamiltonian<O, M> {
+        type Output = StaticHamiltonian<O, M>;
+
+        fn add(self, other: Operator<'_, O::OperatorType, N>) -> StaticHamiltonian<O, M> {
+            StaticHamiltonian {
+                matrix: self.matrix + other.embed_in_hilbert_space(),
+                qubits: self.qubits,
+            }
+        }
+    }
+
     impl<O: NQubitOperator, const M: usize> StaticHamiltonian<O, M> {
         pub fn new(matrix: SMatrix<O::OperatorType, M, M>) -> StaticHamiltonian<O, M> {
             StaticHamiltonian { matrix, qubits: (M as u32).log2() as usize }
-        }
-        pub fn from_operator_sum(operators: &[O]) -> StaticHamiltonian<O, M> {
-            let mut matrix = zero::<SMatrix<O::OperatorType, M, M>>();
-            for operator in operators {
-                matrix += &operator.matrix;
-            }
-            StaticHamiltonian::new(matrix)
         }
     }
 }
