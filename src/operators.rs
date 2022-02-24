@@ -1,7 +1,7 @@
 mod operators {
     use std::fmt::Debug;
     use std::ops::{Add, AddAssign};
-    use nalgebra::{Complex, Matrix2, Scalar, SMatrix, zero};
+    use nalgebra::{Complex, Matrix2, Scalar, SMatrix};
     use num_traits::{One, Zero};
 
     pub trait ValidOperatorType: Clone + PartialEq + Debug + Zero + One + Scalar + Add + AddAssign{}
@@ -68,9 +68,9 @@ mod operators {
             &self,
         ) -> SMatrix<T, N, N>
         {
-            let mut result = Vec::with_capacity(N * N);
-            let row_shift = N;
-            for q in 0..N {
+            let mut result = vec![T::zero(); N * N];
+            let row_shift = N.log2() as usize;
+            for q in 0..N.log2() as usize {
                 let index = (2 as usize).pow(q as u32);
                 let mat = if self.qubits.contains(&q) {
                     let qubit_index = self.qubits.iter().position(|&x| x == q).unwrap();
@@ -78,8 +78,10 @@ mod operators {
                 } else {
                     SMatrix::<T, 2, 2>::identity()
                 };
-                result.splice(index..=(index + 1), mat.row(0).iter().cloned());
-                result.splice((index + (q + 1) * row_shift)..=(index + (q + 1) * row_shift + 1), mat.row(1).iter().cloned());
+                println!("{:?}", N);
+                println!("{:?}", result);
+                result.splice((index-1)..(index + 1), mat.row(0).iter().cloned());
+                result.splice((index - 1 + (q + 1) * row_shift)..(index + (q + 1) * row_shift + 1), mat.row(1).iter().cloned());
             }
             SMatrix::from_row_slice(result.as_slice())
         }
@@ -123,6 +125,7 @@ mod operators {
 mod tests {
     use crate::operators::operators::*;
     use nalgebra::Complex;
+    use nalgebra::SMatrix;
 
     #[test]
     fn test_pauli_commutation() {
@@ -142,5 +145,12 @@ mod tests {
     #[test]
     fn test_two_qubit_operator() {
         let _xy = Operator::new(&[0, 1], X.kronecker(&Y));
+    }
+
+    #[test]
+    fn test_add_operator_to_hamiltonian() {
+        let hamiltonian:StaticHamiltonian<Operator<Complex<f32>, 2>, 4> = StaticHamiltonian::new(SMatrix::<Complex<f32>, 4, 4>::identity());
+        let operator = Operator::new(&[0], );
+        let hamiltonian = hamiltonian + operator;
     }
 }
