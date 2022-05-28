@@ -78,8 +78,6 @@ mod operators {
                 } else {
                     SMatrix::<T, 2, 2>::identity()
                 };
-                println!("{:?}", N);
-                println!("{:?}", result);
                 result.splice((index-1)..(index + 1), mat.row(0).iter().cloned());
                 result.splice((index - 1 + (q + 1) * row_shift)..(index + (q + 1) * row_shift + 1), mat.row(1).iter().cloned());
             }
@@ -124,7 +122,7 @@ mod operators {
 #[cfg(test)]
 mod tests {
     use crate::operators::operators::*;
-    use nalgebra::Complex;
+    use nalgebra::{Complex, Matrix2};
     use nalgebra::SMatrix;
 
     #[test]
@@ -150,7 +148,9 @@ mod tests {
     #[test]
     fn test_add_operator_to_hamiltonian() {
         let hamiltonian:StaticHamiltonian<Operator<Complex<f32>, 2>, 4> = StaticHamiltonian::new(SMatrix::<Complex<f32>, 4, 4>::identity());
-        let operator = Operator::new(&[0], );
+        let operator = Operator::new(&[0], X * Complex::new(0.0, 0.0));
         let hamiltonian = hamiltonian + operator;
+        assert_eq!(hamiltonian.matrix, SMatrix::<Complex<f32>, 4, 4>::identity());
+
     }
 }
